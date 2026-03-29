@@ -5,7 +5,7 @@
  */
 
 const BASE_URL = 'https://api.sportradar.com/cricket-t2/en';
-const API_KEY = 'vXFtcmMEnNPKo59Q39cVXVCR66Ic6O0rKzLt1WVf';
+const API_KEY = '8BX22ANhymujY4zQKsySzdzJ1B4H6QiCdJY2RG63';
 
 // Rate limiting: 1 second delay between API calls
 let lastCallTime = 0;
