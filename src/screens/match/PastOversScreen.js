@@ -1,10 +1,12 @@
-import React from 'react';
-import { View, Text, StyleSheet, StatusBar, FlatList } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, StatusBar, FlatList, ActivityIndicator } from 'react-native';
 import { colors } from '../../styles/colors';
 import { typography } from '../../styles/typography';
 import { spacing } from '../../styles/spacing';
 import Header from '../../components/common/Header';
-import { pastOversData } from '../../data/mockData';
+import { cricketApi } from '../../services/api';
+import { transformTimelineToPastOvers } from '../../services/dataTransformers';
+import { pastOversData as mockPastOversData } from '../../data/mockData';
 
 const getBallColor = (type) => {
   switch (type) {
@@ -22,7 +24,38 @@ const getBallTextColor = (type) => {
   return colors.textPrimary;
 };
 
-const PastOversScreen = ({ navigation }) => {
+const PastOversScreen = ({ navigation, route }) => {
+  const eventId = route?.params?.eventId;
+  const matchTitle = route?.params?.matchTitle || 'India vs South Africa 5th iT20';
+
+  const [pastOversData, setPastOversData] = useState(mockPastOversData);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    if (!eventId) return;
+
+    const fetchTimeline = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const data = await cricketApi.getMatchTimeline(eventId);
+        const transformed = transformTimelineToPastOvers(data);
+        if (transformed.length > 0) {
+          setPastOversData(transformed);
+        } else {
+          setError('No over data available yet');
+        }
+      } catch (err) {
+        console.warn('[PastOvers] Timeline fetch failed:', err);
+        setError('Using cached data');
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchTimeline();
+  }, [eventId]);
+
   const renderOverItem = ({ item }) => (
     <View style={styles.overItem}>
       <View style={styles.overHeader}>
@@ -48,6 +81,16 @@ const PastOversScreen = ({ navigation }) => {
           </View>
         ))}
       </View>
+      {/* Commentary (from API) */}
+      {item.commentary && item.commentary.length > 0 && (
+        <View style={styles.commentaryContainer}>
+          {item.commentary.slice(0, 2).map((text, i) => (
+            <Text key={i} style={styles.commentaryText} numberOfLines={2}>
+              {text}
+            </Text>
+          ))}
+        </View>
+      )}
     </View>
   );
 
@@ -55,18 +98,32 @@ const PastOversScreen = ({ navigation }) => {
     <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor={colors.background} />
       <Header
-        title="India vs South Africa 5th iT20"
+        title={matchTitle}
         showBack
         onBackPress={() => navigation.goBack()}
       />
 
-      <FlatList
-        data={pastOversData}
-        keyExtractor={(item) => `over-${item.over}`}
-        renderItem={renderOverItem}
-        contentContainerStyle={styles.listContent}
-        showsVerticalScrollIndicator={false}
-      />
+      {loading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#3B82F6" />
+          <Text style={styles.loadingText}>Loading overs data...</Text>
+        </View>
+      ) : (
+        <>
+          {error && (
+            <View style={styles.errorBanner}>
+              <Text style={styles.errorText}>{error}</Text>
+            </View>
+          )}
+          <FlatList
+            data={pastOversData}
+            keyExtractor={(item) => `over-${item.over}`}
+            renderItem={renderOverItem}
+            contentContainerStyle={styles.listContent}
+            showsVerticalScrollIndicator={false}
+          />
+        </>
+      )}
     </View>
   );
 };
@@ -79,6 +136,30 @@ const styles = StyleSheet.create({
   listContent: {
     paddingHorizontal: spacing.screenPaddingH,
     paddingBottom: spacing.huge,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    color: '#CCCCCC',
+    fontSize: 14,
+    marginTop: 12,
+  },
+  errorBanner: {
+    backgroundColor: 'rgba(230, 57, 70, 0.15)',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    marginHorizontal: 16,
+    marginTop: 8,
+    marginBottom: 4,
+    borderRadius: 6,
+  },
+  errorText: {
+    color: '#FF6B6B',
+    fontSize: 11,
+    textAlign: 'center',
   },
   overItem: {
     paddingVertical: spacing.lg,
@@ -125,6 +206,18 @@ const styles = StyleSheet.create({
   ballText: {
     ...typography.labelSmall,
     fontWeight: '700',
+  },
+  commentaryContainer: {
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 0.5,
+    borderTopColor: 'rgba(255,255,255,0.05)',
+  },
+  commentaryText: {
+    color: colors.textMuted,
+    fontSize: 11,
+    lineHeight: 16,
+    marginBottom: 4,
   },
 });
 

@@ -4,8 +4,9 @@ import Svg, { Rect, Defs, LinearGradient as SvgGradient, Stop } from 'react-nati
 import { colors } from '../../styles/colors';
 import { typography } from '../../styles/typography';
 import { spacing } from '../../styles/spacing';
+import { TouchableOpacity } from 'react-native';
 
-const MatchHeader = ({ match }) => {
+const MatchHeader = ({ match, onPress }) => {
   const {
     team1 = {},
     team2 = {},
@@ -53,7 +54,11 @@ const MatchHeader = ({ match }) => {
   const badgeStyles = getStatusBadgeStyles();
 
   return (
-    <View style={styles.outerContainer}>
+    <TouchableOpacity 
+      style={styles.outerContainer}
+      activeOpacity={0.85}
+      onPress={onPress}
+    >
       <View style={styles.container}>
         {/* Gradient Background using SVG */}
         <View style={StyleSheet.absoluteFill}>
@@ -88,7 +93,7 @@ const MatchHeader = ({ match }) => {
                   <Text style={styles.scoreDivider}>/</Text>
                   <Text style={styles.scoreSmall}>{team1.score?.split('/')[1]}</Text>
                 </View>
-                <Text style={styles.oversText}>({team1.overs})</Text>
+                {team1.overs ? <Text style={styles.oversText}>({team1.overs})</Text> : null}
               </View>
             </View>
             {renderFormDots(team1.form)}
@@ -117,7 +122,7 @@ const MatchHeader = ({ match }) => {
                   <Text style={styles.scoreDivider}>/</Text>
                   <Text style={styles.scoreSmall}>{team2.score?.split('/')[1]}</Text>
                 </View>
-                <Text style={[styles.oversText, styles.textRight]}>({team2.overs})</Text>
+                {team2.overs ? <Text style={[styles.oversText, styles.textRight]}>({team2.overs})</Text> : null}
               </View>
             </View>
             {renderFormDots(team2.form, true)}
@@ -131,7 +136,7 @@ const MatchHeader = ({ match }) => {
           <Text style={styles.footerText}>{result}</Text>
         </View>
       ) : null}
-    </View>
+    </TouchableOpacity>
   );
 };
 

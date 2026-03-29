@@ -575,8 +575,12 @@ export const teamsToFollow = [
   { name: 'England', flag: '🏴󠁧󠁢󠁥󠁮󠁧󠁿' },
   { name: 'South Africa', flag: '🇿🇦' },
   { name: 'Australia', flag: '🇦🇺' },
-  { name: 'USA', flag: '🇺🇸' },
+  { name: 'New Zealand', flag: '🇳🇿' },
+  { name: 'Pakistan', flag: '🇵🇰' },
   { name: 'West Indies', flag: '🏴' },
+  { name: 'Sri Lanka', flag: '🇱🇰' },
+  { name: 'Bangladesh', flag: '🇧🇩' },
+  { name: 'Afghanistan', flag: '🇦🇫' },
 ];
 
 export const playersToFollow = [

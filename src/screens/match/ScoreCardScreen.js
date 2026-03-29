@@ -1,14 +1,44 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, StatusBar, ScrollView } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, StatusBar, ScrollView, ActivityIndicator } from 'react-native';
 import { colors } from '../../styles/colors';
 import { typography } from '../../styles/typography';
 import { spacing } from '../../styles/spacing';
 import Header from '../../components/common/Header';
 import TabSelector from '../../components/common/TabSelector';
-import { scorecardData } from '../../data/mockData';
+import { cricketApi } from '../../services/api';
+import { transformSummaryToScorecard } from '../../services/dataTransformers';
+import { cacheSummaryPlayers } from '../../services/playerCache';
+import { scorecardData as mockScorecardData } from '../../data/mockData';
 
-const ScoreCardScreen = ({ navigation }) => {
+const ScoreCardScreen = ({ navigation, route }) => {
+  const eventId = route?.params?.eventId;
   const [activeInnings, setActiveInnings] = useState(0);
+  const [scorecardData, setScorecardData] = useState(mockScorecardData);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    if (!eventId) return;
+
+    const fetchScorecard = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const data = await cricketApi.getMatchSummary(eventId);
+        const transformed = transformSummaryToScorecard(data);
+        setScorecardData(transformed);
+        // Cache players from summary for search
+        cacheSummaryPlayers(data);
+      } catch (err) {
+        console.warn('[ScoreCard] Fetch failed, using mock data:', err);
+        setError('Using cached scorecard data');
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchScorecard();
+  }, [eventId]);
+
   const innings = activeInnings === 0
     ? scorecardData.firstInnings
     : scorecardData.secondInnings;
@@ -41,11 +71,24 @@ const ScoreCardScreen = ({ navigation }) => {
     </View>
   );
 
+  if (loading) {
+    return (
+      <View style={styles.container}>
+        <StatusBar barStyle="light-content" backgroundColor={colors.background} />
+        <Header title="Scorecard" showBack onBackPress={() => navigation.goBack()} />
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#3B82F6" />
+          <Text style={styles.loadingText}>Loading scorecard...</Text>
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor={colors.background} />
       <Header
-        title="Scorecard"
+        title={route?.params?.matchTitle ? `Scorecard - ${route.params.matchTitle}` : 'Scorecard'}
         showBack
         onBackPress={() => navigation.goBack()}
       />
@@ -55,6 +98,12 @@ const ScoreCardScreen = ({ navigation }) => {
         activeTab={activeInnings}
         onTabChange={setActiveInnings}
       />
+
+      {error && (
+        <View style={styles.errorBanner}>
+          <Text style={styles.errorText}>{error}</Text>
+        </View>
+      )}
 
       <ScrollView
         contentContainerStyle={styles.scrollContent}
@@ -109,7 +158,7 @@ const ScoreCardScreen = ({ navigation }) => {
         )}
 
         {/* Fall of wickets */}
-        {innings.fallOfWickets && (
+        {innings.fallOfWickets && innings.fallOfWickets.length > 0 && (
           <View style={styles.fowSection}>
             <Text style={styles.fowTitle}>Fall of Wickets</Text>
             {innings.fallOfWickets.map((fow, i) => (
@@ -153,6 +202,28 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: spacing.screenPaddingH,
     paddingBottom: spacing.huge,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    color: '#CCCCCC',
+    fontSize: 14,
+    marginTop: 12,
+  },
+  errorBanner: {
+    backgroundColor: 'rgba(230, 57, 70, 0.15)',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    marginHorizontal: 16,
+    borderRadius: 6,
+  },
+  errorText: {
+    color: '#FF6B6B',
+    fontSize: 11,
+    textAlign: 'center',
   },
   teamHeader: {
     flexDirection: 'row',

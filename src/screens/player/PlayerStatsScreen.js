@@ -1,16 +1,90 @@
-import React from 'react';
-import { View, Text, StyleSheet, StatusBar, ScrollView } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, StatusBar, ScrollView, ActivityIndicator } from 'react-native';
 import { colors } from '../../styles/colors';
 import { typography } from '../../styles/typography';
 import { spacing } from '../../styles/spacing';
 import Header from '../../components/common/Header';
+import { cricketApi } from '../../services/api';
+import { transformPlayerProfile, transformPlayerMatchStats } from '../../services/dataTransformers';
 
 const PlayerStatsScreen = ({ navigation, route }) => {
   const player = route?.params?.player || {};
+  const playerId = route?.params?.playerId || player?.id;
+  const eventId = route?.params?.eventId;
   const fullStats = player.fullStats || {};
   const isBowler = !!fullStats.bowlingStyle;
-  const playerType = isBowler ? 'bowler' : 'batsman';
-    const renderStatsSection = (section, color = '#9D4CF0') => {
+
+  // API state
+  const [apiProfile, setApiProfile] = useState(null);
+  const [matchStats, setMatchStats] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  // Fetch player profile from API if we have a playerId
+  useEffect(() => {
+    if (!playerId) return;
+
+    const fetchProfile = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const [profileData, summaryData] = await Promise.all([
+          cricketApi.getPlayerProfile(playerId).catch(() => null),
+          eventId ? cricketApi.getMatchSummary(eventId).catch(() => null) : null,
+        ]);
+
+        if (profileData) {
+          setApiProfile(transformPlayerProfile(profileData));
+        }
+
+        if (summaryData) {
+          setMatchStats(transformPlayerMatchStats(summaryData, playerId));
+        }
+      } catch (err) {
+        console.warn('[PlayerStats] Profile fetch failed:', err);
+        setError('Could not load full profile');
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchProfile();
+  }, [playerId]);
+
+  // Merge API profile with existing player data
+  const mergedPlayer = {
+    ...player,
+    ...(apiProfile ? {
+      fullStats: {
+        ...fullStats,
+        born: apiProfile.nationality || fullStats.born || 'N/A',
+        age: apiProfile.dateOfBirth || fullStats.age || 'N/A',
+        bowlingStyle: apiProfile.bowlingStyle || fullStats.bowlingStyle,
+        battingStyle: apiProfile.battingStyle || fullStats.battingStyle,
+        current: matchStats ? {
+          title: 'Current Match Stats',
+          data: matchStats.batting ? [
+            { label: 'Runs', shortLabel: 'R', value: matchStats.batting.runs || '0' },
+            { label: 'Balls', shortLabel: 'B', value: matchStats.batting.balls_faced || '0' },
+            { label: 'Fours', shortLabel: '4s', value: matchStats.batting.fours || '0' },
+            { label: 'Sixes', shortLabel: '6s', value: matchStats.batting.sixes || '0' },
+            { label: 'Strike Rate', shortLabel: 'SR', value: matchStats.batting.strike_rate || '0.0' },
+          ] : matchStats.bowling ? [
+            { label: 'Overs', shortLabel: 'O', value: matchStats.bowling.overs_bowled || '0' },
+            { label: 'Maidens', shortLabel: 'M', value: matchStats.bowling.maidens || '0' },
+            { label: 'Runs', shortLabel: 'R', value: matchStats.bowling.conceded_runs || '0' },
+            { label: 'Wickets', shortLabel: 'W', value: matchStats.bowling.wickets || '0' },
+            { label: 'Economy', shortLabel: 'Econ', value: matchStats.bowling.economy_rate || '0.0' },
+          ] : fullStats.current?.data
+        } : fullStats.current,
+      },
+      country: apiProfile.country || player.country,
+    } : {}),
+  };
+
+  const mergedFullStats = mergedPlayer.fullStats || {};
+  const mergedIsBowler = !!mergedFullStats.bowlingStyle;
+
+  const renderStatsSection = (section, color = '#9D4CF0') => {
     if (!section) return null;
     return (
       <View style={styles.statsCardWrapper}>
@@ -19,9 +93,8 @@ const PlayerStatsScreen = ({ navigation, route }) => {
           <View style={styles.statsCardHeader}>
             <Text style={styles.statsCardTitle}>{section.title}</Text>
           </View>
-          
+
           <View style={styles.statsGrid}>
-            {/* Top row - usually 5 columns */}
             <View style={styles.gridRow}>
               {section.data?.slice(0, 5).map((stat, i) => (
                 <View key={`top-${i}`} style={styles.statCol5}>
@@ -30,7 +103,6 @@ const PlayerStatsScreen = ({ navigation, route }) => {
                 </View>
               ))}
             </View>
-            {/* Bottom row - usually 5 columns */}
             <View style={[styles.gridRow, styles.dividerRow]}>
               {section.data?.slice(5, 10).map((stat, i) => (
                 <View key={`bot-${i}`} style={styles.statCol5}>
@@ -75,7 +147,7 @@ const PlayerStatsScreen = ({ navigation, route }) => {
     );
   };
 
-  const playerName = player.name?.replace('\n', ' ') || 'Player';
+  const playerName = (mergedPlayer.name || player.name || 'Player').replace('\n', ' ');
   const subtitle = 'Stats & Arena Metrics';
 
   return (
@@ -93,21 +165,30 @@ const PlayerStatsScreen = ({ navigation, route }) => {
         style={{ backgroundColor: colors.background }}
         showsVerticalScrollIndicator={false}
       >
+        {loading && (
+          <View style={styles.loadingBanner}>
+            <ActivityIndicator size="small" color="#3B82F6" />
+            <Text style={styles.loadingText}>Loading player profile...</Text>
+          </View>
+        )}
+
+        {error && (
+          <View style={styles.errorBanner}>
+            <Text style={styles.errorText}>{error}</Text>
+          </View>
+        )}
+
         {/* Player Profile Card */}
         <View style={styles.profileCardWrapper}>
           <View style={styles.profileGlow} />
           <View style={styles.profileCard}>
             <View style={styles.headerRow}>
               <View style={styles.profileImageWrapper}>
-                {player.image ? (
-                  <Image source={{ uri: player.image }} style={styles.profileImage} />
-                ) : (
-                  <View style={styles.profilePlaceholder}>
-                    <Text style={styles.profileInitial}>
-                      {playerName.charAt(0)}
-                    </Text>
-                  </View>
-                )}
+                <View style={styles.profilePlaceholder}>
+                  <Text style={styles.profileInitial}>
+                    {playerName.charAt(0)}
+                  </Text>
+                </View>
               </View>
               <View style={styles.profileMainInfo}>
                 <View style={{ flex: 1 }}>
@@ -120,9 +201,9 @@ const PlayerStatsScreen = ({ navigation, route }) => {
                     <Text style={styles.profileName}>{playerName}</Text>
                   )}
                 </View>
-                {player.country && (
+                {(mergedPlayer.country || player.country) && (
                   <View style={styles.flagBadge}>
-                    <Text style={styles.countryFlag}>{player.country}</Text>
+                    <Text style={styles.countryFlag}>{mergedPlayer.country || player.country}</Text>
                   </View>
                 )}
               </View>
@@ -132,16 +213,16 @@ const PlayerStatsScreen = ({ navigation, route }) => {
             <View style={styles.bioRow}>
               <View style={styles.bioItem}>
                 <Text style={styles.bioLabel}>Born</Text>
-                <Text style={styles.bioValue}>{fullStats.born || 'N/A'}</Text>
+                <Text style={styles.bioValue}>{mergedFullStats.born || 'N/A'}</Text>
               </View>
               <View style={styles.bioItem}>
                 <Text style={styles.bioLabel}>Age</Text>
-                <Text style={styles.bioValue}>{fullStats.age || 'N/A'}</Text>
+                <Text style={styles.bioValue}>{mergedFullStats.age || 'N/A'}</Text>
               </View>
               <View style={styles.bioItem}>
-                <Text style={styles.bioLabel}>{isBowler ? 'Bowling Style' : 'Batting Style'}</Text>
+                <Text style={styles.bioLabel}>{mergedIsBowler ? 'Bowling Style' : 'Batting Style'}</Text>
                 <Text style={styles.bioValue}>
-                  {fullStats.bowlingStyle || fullStats.battingStyle || 'N/A'}
+                  {mergedFullStats.bowlingStyle || mergedFullStats.battingStyle || 'N/A'}
                 </Text>
               </View>
             </View>
@@ -150,10 +231,10 @@ const PlayerStatsScreen = ({ navigation, route }) => {
 
         {/* Stats Sections */}
         <View style={styles.statsSectionContainer}>
-          {renderStatsSection(fullStats.current)}
-          {renderStatsSection(fullStats.allTime, '#1C2431')}
-          {fullStats.metrics?.current && renderMetricsSection(fullStats.metrics.current)}
-          {fullStats.metrics?.allTime && renderMetricsSection(fullStats.metrics.allTime, '#1C2431')}
+          {renderStatsSection(mergedFullStats.current)}
+          {renderStatsSection(mergedFullStats.allTime, '#1C2431')}
+          {mergedFullStats.metrics?.current && renderMetricsSection(mergedFullStats.metrics.current)}
+          {mergedFullStats.metrics?.allTime && renderMetricsSection(mergedFullStats.metrics.allTime, '#1C2431')}
         </View>
       </ScrollView>
     </View>
@@ -167,6 +248,30 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingBottom: 40,
+  },
+  loadingBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+    gap: 8,
+  },
+  loadingText: {
+    color: '#CCCCCC',
+    fontSize: 12,
+  },
+  errorBanner: {
+    backgroundColor: 'rgba(230, 57, 70, 0.15)',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    marginHorizontal: 16,
+    marginTop: 4,
+    borderRadius: 6,
+  },
+  errorText: {
+    color: '#FF6B6B',
+    fontSize: 11,
+    textAlign: 'center',
   },
   profileCardWrapper: {
     marginHorizontal: 16,
@@ -202,11 +307,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#1E1B2E',
     overflow: 'hidden',
     marginRight: 16,
-  },
-  profileImage: {
-    width: '100%',
-    height: '100%',
-    resizeMode: 'cover',
   },
   profilePlaceholder: {
     width: '100%',

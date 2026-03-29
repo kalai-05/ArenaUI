@@ -10,16 +10,16 @@ const CHART_HEIGHT = 160;
 
 const MatchVisualizer = ({ type = 'manhattan', data }) => {
   const renderManhattan = () => {
-    // Mock data for the chart bars
-    const bars = [
+    // Use data.manhattan if available, else fallback
+    const bars = data?.manhattan || [
       { r: 2, t: 'dot' }, { r: 6, t: 'six' }, { r: 1, t: 'one' }, 
       { r: 12, t: 'four' }, { r: 0, t: 'dot' }, { r: 4, t: 'four' },
       { r: 1, t: 'one' }, { r: 1, t: 'one' }, { r: 8, t: 'four' },
       { r: 4, t: 'four' }, { r: 15, t: 'six' }, { r: 6, t: 'six' }
     ];
 
-    const barWidth = 12;
-    const barGap = 8;
+    const barWidth = Math.max(8, (CHART_WIDTH - 40) / Math.max(bars.length, 12) - 4);
+    const barGap = 4;
 
     return (
       <View style={styles.chartWrapper}>
@@ -39,26 +39,26 @@ const MatchVisualizer = ({ type = 'manhattan', data }) => {
 
           {/* Bars */}
           {bars.map((bar, i) => {
-            const barHeight = bar.r * 8;
+            const barHeight = Math.min(CHART_HEIGHT - 20, bar.r * 6);
             const x = 20 + i * (barWidth + barGap);
             const y = CHART_HEIGHT - barHeight;
 
             return (
               <G key={i}>
                 <Rect
-                  x={x}
-                  y={y}
-                  width={barWidth}
-                  height={barHeight}
-                  fill={bar.t === 'six' ? '#52B4F5' : bar.t === 'wicket' ? '#E63946' : '#1E1B2E'}
-                  rx="2"
+                    x={x}
+                    y={y}
+                    width={barWidth}
+                    height={barHeight}
+                    fill={bar.w > 0 ? '#E63946' : bar.r >= 6 ? '#52B4F5' : bar.r >= 4 ? '#8E5FEC' : '#1E1B2E'}
+                    rx="2"
                 />
-                {bar.r > 0 && bar.t !== 'dot' && (
+                {bar.r > 0 && (
                   <SvgText
                     x={x + barWidth / 2}
                     y={y - 6}
                     fill="#CCCCCC"
-                    fontSize="10"
+                    fontSize="8"
                     textAnchor="middle"
                   >
                     {bar.r}
@@ -67,46 +67,42 @@ const MatchVisualizer = ({ type = 'manhattan', data }) => {
               </G>
             );
           })}
-
-          {/* Smooth line overlay */}
-          <Path
-            d={`M 20 ${CHART_HEIGHT - 40} Q 100 ${CHART_HEIGHT - 120} 180 ${CHART_HEIGHT - 60} T ${CHART_WIDTH - 20} ${CHART_HEIGHT - 100}`}
-            fill="none"
-            stroke="#52B4F5"
-            strokeWidth="2"
-            opacity="0.6"
-          />
         </Svg>
       </View>
     );
   };
 
   const renderWorm = () => {
+    const wormData = data?.worm || { team1: [], team2: [] };
+    
+    const renderLine = (points, color) => {
+        if (!points || points.length === 0) return null;
+        const xStep = (CHART_WIDTH - 40) / (points.length > 1 ? points.length - 1 : 1);
+        let d = `M 20 ${CHART_HEIGHT - 20}`;
+        points.forEach((p, i) => {
+            const x = 20 + i * xStep;
+            const y = CHART_HEIGHT - 20 - (p.runs * 0.5); // scaling
+            d += ` L ${x} ${y}`;
+        });
+        return (
+            <Path
+              d={d}
+              fill="none"
+              stroke={color}
+              strokeWidth="2"
+            />
+        );
+    };
+
     return (
       <View style={styles.chartWrapper}>
         <Svg width={CHART_WIDTH} height={CHART_HEIGHT}>
-          {/* Grid lines */}
           {[0, 1, 2, 3, 4].map((i) => (
             <Line key={i} x1="0" y1={(CHART_HEIGHT / 4) * i} x2={CHART_WIDTH} y2={(CHART_HEIGHT / 4) * i} stroke="rgba(255,255,255,0.05)" />
           ))}
 
-          {/* Team 1 Line (RSA) */}
-          <Path
-            d={`M 20 ${CHART_HEIGHT - 20} L 80 ${CHART_HEIGHT - 50} L 140 ${CHART_HEIGHT - 80} L 200 ${CHART_HEIGHT - 110} L 260 ${CHART_HEIGHT - 140}`}
-            fill="none"
-            stroke="#8E5FEC"
-            strokeWidth="2"
-          />
-          {/* Team 2 Line (IND) */}
-          <Path
-            d={`M 20 ${CHART_HEIGHT - 20} L 80 ${CHART_HEIGHT - 60} L 140 ${CHART_HEIGHT - 100} L 200 ${CHART_HEIGHT - 105} L 260 ${CHART_HEIGHT - 120}`}
-            fill="none"
-            stroke="#52B4F5"
-            strokeWidth="2"
-          />
-          {/* Wicket dots */}
-          <Circle cx="80" cy={CHART_HEIGHT - 50} r="3" fill="#8E5FEC" />
-          <Circle cx="200" cy={CHART_HEIGHT - 105} r="3" fill="#52B4F5" />
+          {renderLine(wormData.team1, '#8E5FEC')}
+          {renderLine(wormData.team2, '#52B4F5')}
         </Svg>
       </View>
     );

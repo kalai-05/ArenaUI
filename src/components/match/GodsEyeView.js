@@ -12,7 +12,8 @@ import {
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const FIELD_SIZE = 240;
 
-const GodsEyeView = ({ onActionPress }) => {
+const GodsEyeView = ({ onActionPress, data }) => {
+  const { temp = '20°C', humidity = '63%', rainProb = '9%' } = data || {};
   // Animation refs
   const crosshairWidth = useRef(new Animated.Value(0)).current;
   const crosshairHeight = useRef(new Animated.Value(0)).current;
@@ -81,19 +82,34 @@ const GodsEyeView = ({ onActionPress }) => {
       ])
     ).start();
 
-    // 5. Trigger a "Boundary Shot" animation on mount (Demonstration)
-    triggerShotAnimation();
+    // 5. Trigger a "Boundary Shot" animation on mount handled by another effect
   }, []);
 
-  const triggerShotAnimation = () => {
+  useEffect(() => {
+    if (data?.latestBall) {
+      triggerShotAnimation(data.latestBall);
+    } else {
+      triggerShotAnimation();
+    }
+  }, [data?.latestBall]);
+
+  const triggerShotAnimation = (latestBall = null) => {
     // Reset
     ballMoveAnim.setValue({ x: 0, y: 0 });
     shotLineOpacity.setValue(0);
     shotLineLength.setValue(0);
 
-    // Target a specific boundary point (e.g., Mid-wicket)
-    const targetX = FIELD_SIZE * 0.45;
-    const targetY = FIELD_SIZE * -0.3;
+    // Target a specific boundary point
+    let targetX = FIELD_SIZE * 0.45;
+    let targetY = FIELD_SIZE * -0.3;
+
+    if (latestBall && typeof latestBall.angle === 'number') {
+      const rad = (latestBall.angle - 90) * (Math.PI / 180);
+      // Rough mapping of angle to field
+      const distance = FIELD_SIZE * 0.4;
+      targetX = Math.cos(rad) * distance;
+      targetY = Math.sin(rad) * distance;
+    }
 
     Animated.sequence([
       Animated.delay(1000), // Wait for field to setup
@@ -159,9 +175,9 @@ const GodsEyeView = ({ onActionPress }) => {
 
       {/* Weather Bar */}
       <View style={styles.weatherBar}>
-        {renderWeatherChip('☀️ 20°C')}
-        {renderWeatherChip('💧 63%')}
-        {renderWeatherChip('🌧 9%')}
+        {renderWeatherChip(`☀️ ${temp}`)}
+        {renderWeatherChip(`💧 ${humidity}`)}
+        {renderWeatherChip(`🌧 ${rainProb}`)}
       </View>
 
       <View style={styles.fieldSection}>
